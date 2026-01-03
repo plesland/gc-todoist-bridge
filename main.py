@@ -1,97 +1,46 @@
-import os
-import requests
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
+import requests
+import os
 
-# ------------------------------------------------------------------
-# Environment variables (must exist in DigitalOcean App settings)
-# ------------------------------------------------------------------
+app = FastAPI(title="Todoist Bridge", version="1.0.0")
 
-TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
-if not TODOIST_API_TOKEN:
-    raise RuntimeError("Missing TODOIST_API_TOKEN environment variable")
+TODOIST_API_URL = "https://api.todoist.com/rest/v2/tasks"
 
-if not INTERNAL_API_KEY:
-    raise RuntimeError("Missing INTERNAL_API_KEY environment variable")
 
-# ------------------------------------------------------------------
-# FastAPI app
-# ------------------------------------------------------------------
-
-app = FastAPI(
-    title="GC Todoist Bridge",
-    description="Private API bridge between ChatGPT and Todoist",
-    version="1.0.0",
-)
-
-# ------------------------------------------------------------------
-# Models
-# ------------------------------------------------------------------
-
-class TaskCreateRequest(BaseModel):
+class TaskRequest(BaseModel):
     content: str = Field(..., description="The task title")
-    due_string: Optional[str] = Field(
+    due_string: str | None = Field(
         None,
-        description="Natural language due date (e.g. 'tomorrow', 'next Monday')",
+        description="Natural language due date, e.g. 'tomorrow'"
     )
 
 
-class TaskCreateResponse(BaseModel):
-    id: str
-    content: str
-
-
-# ------------------------------------------------------------------
-# Auth helper
-# ------------------------------------------------------------------
-
-def verify_internal_key(x_api_key: str):
-    if x_api_key != INTERNAL_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-
-# ------------------------------------------------------------------
-# Routes
-# ------------------------------------------------------------------
-
 @app.get("/health")
-def health_check():
+def health():
     return {"status": "ok"}
 
 
-@app.post(
-    "/task",
-    response_model=TaskCreateResponse,
-    summary="Create Todoist task",
-    description="Creates a task in Todoist using the REST API",
-)
+@app.post("/task")
 def create_task(
-    task: TaskCreateRequest,
-    x_api_key: str = Header(..., alias="X-API-Key"),
+    task: TaskRequest,
+    x_api_key: str = Header(None)
 ):
-    # ------------------------------------------------------------------
-    # Authenticate caller (ChatGPT Custom GPT)
-    # ------------------------------------------------------------------
-    verify_internal_key(x_api_key)
+    if x_api_key != INTERNAL_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # ------------------------------------------------------------------
-    # Build Todoist payload
-    # ------------------------------------------------------------------
-    payload = {
-        "content": task.content,
-    }
+    if not task.content or not task.content.strip():
+        raise HTTPException(status_code=400, detail="Missing task content")
 
+    payload = {"content": task.content}
     if task.due_string:
         payload["due_string"] = task.due_string
 
-    # ------------------------------------------------------------------
-    # Call Todoist API
-    # ------------------------------------------------------------------
     response = requests.post(
-        "https://api.todoist.com/rest/v2/tasks",
+        TODOIST_API_URL,
         headers={
             "Authorization": f"Bearer {TODOIST_API_TOKEN}",
             "Content-Type": "application/json",
@@ -100,19 +49,10 @@ def create_task(
         timeout=10,
     )
 
-    if response.status_code != 200:
+    if response.status_code >= 400:
         raise HTTPException(
             status_code=502,
-            detail={
-                "error": "Todoist API call failed",
-                "status_code": response.status_code,
-                "response": response.text,
-            },
+            detail=response.text,
         )
 
-    data = response.json()
-
-    return {
-        "id": data["id"],
-        "content": data["content"],
-    }
+    return response.json()
