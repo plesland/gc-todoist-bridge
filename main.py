@@ -3,6 +3,7 @@ import requests
 from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime, timedelta
 
 TODOIST_API_TOKEN = os.environ.get("TODOIST_API_TOKEN")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY")
@@ -141,3 +142,47 @@ def close_task(
         raise HTTPException(status_code=r.status_code, detail=r.text)
 
     return {"status": "closed"}
+    
+@app.get("/tasks/summary")
+def task_summary(x_api_key: str = Header(...)):
+    auth_check(x_api_key)
+
+    r = requests.get(
+        "https://api.todoist.com/rest/v2/tasks",
+        headers=TODOIST_HEADERS,
+        params={"label": "gc-project"},
+        timeout=10
+    )
+
+    if r.status_code >= 400:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+
+    tasks = r.json()
+    now = datetime.utcnow()
+    soon = now + timedelta(days=5)
+
+    summary = {
+        "overdue": [],
+        "blocking": [],
+        "due_soon": [],
+        "inspections": []
+    }
+
+    for t in tasks:
+        labels = set(t.get("labels", []))
+        due = t.get("due")
+
+        if "blocking" in labels:
+            summary["blocking"].append(t)
+
+        if "inspection" in labels:
+            summary["inspections"].append(t)
+
+        if due and due.get("date"):
+            due_date = datetime.fromisoformat(due["date"].replace("Z", ""))
+            if due_date < now:
+                summary["overdue"].append(t)
+            elif due_date <= soon:
+                summary["due_soon"].append(t)
+
+    return summary
