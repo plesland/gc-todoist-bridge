@@ -5,19 +5,21 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
 
+# Environment variables (do NOT hard-crash on import)
 TODOIST_API_TOKEN = os.environ.get("TODOIST_API_TOKEN")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY")
 
-if not TODOIST_API_TOKEN or not INTERNAL_API_KEY:
-    raise RuntimeError("Missing required environment variables")
-
 TODOIST_HEADERS = {
-    "Authorization": f"Bearer {TODOIST_API_TOKEN}",
+    "Authorization": f"Bearer {TODOIST_API_TOKEN}" if TODOIST_API_TOKEN else "",
     "Content-Type": "application/json"
 }
 
 app = FastAPI()
 
+
+# -------------------------
+# Models
+# -------------------------
 
 class TaskRequest(BaseModel):
     content: str
@@ -31,15 +33,43 @@ class TaskUpdateRequest(BaseModel):
     labels: Optional[List[str]] = None
 
 
+# -------------------------
+# Auth / Config Enforcement
+# -------------------------
+
 def auth_check(x_api_key: str):
+    if not INTERNAL_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Server misconfigured: INTERNAL_API_KEY missing"
+        )
+
     if x_api_key != INTERNAL_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
+    if not TODOIST_API_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="Server misconfigured: TODOIST_API_TOKEN missing"
+        )
+
+
+# -------------------------
+# Health
+# -------------------------
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "todoist_token_present": bool(TODOIST_API_TOKEN),
+        "internal_key_present": bool(INTERNAL_API_KEY)
+    }
 
+
+# -------------------------
+# Task Creation
+# -------------------------
 
 @app.post("/task")
 def create_task(
@@ -48,7 +78,9 @@ def create_task(
 ):
     auth_check(x_api_key)
 
-    payload = {"content": task.content}
+    payload = {
+        "content": task.content
+    }
 
     if task.due_string:
         payload["due_string"] = task.due_string
@@ -70,6 +102,10 @@ def create_task(
 
     return r.json()
 
+
+# -------------------------
+# Task Listing
+# -------------------------
 
 @app.get("/tasks")
 def list_tasks(
@@ -95,6 +131,10 @@ def list_tasks(
     return r.json()
 
 
+# -------------------------
+# Task Update
+# -------------------------
+
 @app.patch("/task/{task_id}")
 def update_task(
     task_id: str,
@@ -105,10 +145,12 @@ def update_task(
 
     payload = {}
 
-    if task.content:
+    if task.content is not None:
         payload["content"] = task.content
-    if task.due_string:
+
+    if task.due_string is not None:
         payload["due_string"] = task.due_string
+
     if task.labels is not None:
         payload["labels"] = task.labels
 
@@ -124,6 +166,10 @@ def update_task(
 
     return r.json()
 
+
+# -------------------------
+# Task Close
+# -------------------------
 
 @app.post("/task/{task_id}/close")
 def close_task(
@@ -142,7 +188,12 @@ def close_task(
         raise HTTPException(status_code=r.status_code, detail=r.text)
 
     return {"status": "closed"}
-    
+
+
+# -------------------------
+# Task Summary (Foreman Sweep)
+# -------------------------
+
 @app.get("/tasks/summary")
 def task_summary(x_api_key: str = Header(...)):
     auth_check(x_api_key)
@@ -179,10 +230,13 @@ def task_summary(x_api_key: str = Header(...)):
             summary["inspections"].append(t)
 
         if due and due.get("date"):
-            due_date = datetime.fromisoformat(due["date"].replace("Z", ""))
-            if due_date < now:
-                summary["overdue"].append(t)
-            elif due_date <= soon:
-                summary["due_soon"].append(t)
+            try:
+                due_date = datetime.fromisoformat(due["date"].replace("Z", ""))
+                if due_date < now:
+                    summary["overdue"].append(t)
+                elif due_date <= soon:
+                    summary["due_soon"].append(t)
+            except ValueError:
+                pass
 
     return summary
