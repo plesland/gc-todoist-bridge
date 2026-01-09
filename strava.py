@@ -8,8 +8,9 @@ router = APIRouter(prefix="/strava", tags=["strava"])
 @router.get("/latest-activity")
 def latest_activity():
     token = get_access_token()
-if isinstance(token, dict):
-    return token
+
+    if isinstance(token, dict):
+        return token
 
     resp = requests.get(
         "https://www.strava.com/api/v3/athlete/activities",
