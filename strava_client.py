@@ -40,3 +40,23 @@ def get_access_token():
         }
 
     return resp.json().get("access_token")
+    
+def exchange_code_for_token(code: str):
+    r = requests.post(
+        "https://www.strava.com/oauth/token",
+        data={
+            "client_id": STRAVA_CLIENT_ID,
+            "client_secret": STRAVA_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+        },
+        timeout=10,
+    )
+
+    if r.status_code != 200:
+        return {"error": "strava_token_error", "response": r.text}
+
+    data = r.json()
+
+    save_refresh_token(data["refresh_token"])
+    return {"status": "authorized"}
