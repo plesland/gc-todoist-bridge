@@ -1,17 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 import requests
-from strava_client import get_access_token
-from strava_client import exchange_code_for_token
+from datetime import datetime, timedelta
+from strava_client import get_access_token, exchange_code_for_token
+from auth import auth_check  # adjust import if needed
 
 router = APIRouter(prefix="/strava", tags=["strava"])
+
 
 @router.get("/oauth/callback")
 def strava_oauth_callback(code: str, scope: str = None, state: str = None):
     return exchange_code_for_token(code)
 
-@router.get("/oauth")
-def strava_oauth(code: str):
-    return exchange_code_for_token(code)
 
 @router.get("/activities")
 def list_activities(
@@ -32,26 +31,21 @@ def list_activities(
     resp = requests.get(
         "https://www.strava.com/api/v3/athlete/activities",
         headers={"Authorization": f"Bearer {token}"},
-        params={
-            "after": after_ts,
-            "per_page": 200
-        },
+        params={"after": after_ts, "per_page": 200},
         timeout=10,
     )
 
     if resp.status_code != 200:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
-    activities = []
-    for a in resp.json():
-        activities.append({
-            "id": a["id"],
-            "type": a["type"],
-            "distance_m": a["distance"],
-            "moving_time_s": a["moving_time"],
-            "average_hr": a.get("average_heartrate"),
-            "start_date": a["start_date"],
-        })
+    activities = [{
+        "id": a["id"],
+        "type": a["type"],
+        "distance_m": a["distance"],
+        "moving_time_s": a["moving_time"],
+        "average_hr": a.get("average_heartrate"),
+        "start_date": a["start_date"],
+    } for a in resp.json()]
 
     return {
         "days": days,
@@ -59,13 +53,14 @@ def list_activities(
         "activities": activities
     }
 
+
 @router.get("/latest-activity")
 def latest_activity(x_api_key: str = Header(...)):
     auth_check(x_api_key)
-    token = get_access_token()
 
+    token = get_access_token()
     if isinstance(token, dict):
-        return token
+        raise HTTPException(status_code=500, detail=token)
 
     resp = requests.get(
         "https://www.strava.com/api/v3/athlete/activities",
@@ -75,42 +70,18 @@ def latest_activity(x_api_key: str = Header(...)):
     )
 
     if resp.status_code != 200:
-        return {
-            "error": "strava_api_error",
-            "status": resp.status_code,
-            "body": resp.text,
-        }
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
     data = resp.json()
-
     if not data:
         return {"message": "no activities found"}
 
-    activity = data[0]
-
+    a = data[0]
     return {
-        "id": activity["id"],
-        "type": activity["type"],
-        "distance_m": activity["distance"],
-        "moving_time_s": activity["moving_time"],
-        "average_hr": activity.get("average_heartrate"),
-        "start_date": activity["start_date"],
+        "id": a["id"],
+        "type": a["type"],
+        "distance_m": a["distance"],
+        "moving_time_s": a["moving_time"],
+        "average_hr": a.get("average_heartrate"),
+        "start_date": a["start_date"],
     }
-    
-def oauth_callback(code: str):
-    import requests
-    import os
-
-    resp = requests.post(
-        "https://www.strava.com/oauth/token",
-        data={
-            "client_id": os.environ["STRAVA_CLIENT_ID"],
-            "client_secret": os.environ["STRAVA_CLIENT_SECRET"],
-            "code": code,
-            "grant_type": "authorization_code",
-        },
-        timeout=10,
-    )
-
-    return resp.json()
-    
