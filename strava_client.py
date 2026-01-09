@@ -1,18 +1,11 @@
-import os
-import requests
-from datetime import datetime, timezone
-
-STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID")
-STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET")
-STRAVA_REFRESH_TOKEN = os.environ.get("STRAVA_REFRESH_TOKEN")
-
-TOKEN_URL = "https://www.strava.com/oauth/token"
-API_BASE = "https://www.strava.com/api/v3"
-
+from fastapi import HTTPException
 
 def get_access_token():
     if not all([STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REFRESH_TOKEN]):
-        raise RuntimeError("Missing Strava environment variables")
+        raise HTTPException(
+            status_code=500,
+            detail="Strava credentials not configured"
+        )
 
     resp = requests.post(
         "https://www.strava.com/oauth/token",
