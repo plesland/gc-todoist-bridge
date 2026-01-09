@@ -40,7 +40,11 @@ def latest_activity():
         "average_hr": activity.get("average_heartrate"),
         "start_date": activity["start_date"],
     }
+    
     @router.get("/oauth")
+def strava_oauth(code: str):
+    return exchange_code_for_token(code)
+    
 def oauth_callback(code: str):
     import requests
     import os
