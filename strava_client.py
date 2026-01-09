@@ -1,4 +1,4 @@
-himport os
+import os
 import requests
 
 STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID")
@@ -40,9 +40,10 @@ def get_access_token():
         }
 
     return resp.json().get("access_token")
-    
+
+
 def exchange_code_for_token(code: str):
-    r = requests.post(
+    resp = requests.post(
         "https://www.strava.com/oauth/token",
         data={
             "client_id": STRAVA_CLIENT_ID,
@@ -53,9 +54,16 @@ def exchange_code_for_token(code: str):
         timeout=10,
     )
 
-    data = r.json()
+    if resp.status_code != 200:
+        return {
+            "error": "strava_oauth_exchange_failed",
+            "status_code": resp.status_code,
+            "response": resp.text,
+        }
+
+    data = resp.json()
 
     return {
         "refresh_token": data["refresh_token"],
-        "scope": data["scope"]
+        "scope": data["scope"],
     }
