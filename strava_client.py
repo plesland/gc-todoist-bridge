@@ -43,6 +43,15 @@ def get_access_token():
 
 
 def exchange_code_for_token(code: str):
+    if not STRAVA_CLIENT_ID or not STRAVA_CLIENT_SECRET:
+        return {
+            "error": "server_misconfigured",
+            "missing": {
+                "STRAVA_CLIENT_ID": bool(STRAVA_CLIENT_ID),
+                "STRAVA_CLIENT_SECRET": bool(STRAVA_CLIENT_SECRET),
+            },
+        }
+
     resp = requests.post(
         "https://www.strava.com/oauth/token",
         data={
@@ -54,16 +63,30 @@ def exchange_code_for_token(code: str):
         timeout=10,
     )
 
+    try:
+        data = resp.json()
+    except Exception:
+        return {
+            "error": "invalid_strava_response",
+            "status_code": resp.status_code,
+            "raw": resp.text,
+        }
+
     if resp.status_code != 200:
         return {
             "error": "strava_oauth_exchange_failed",
             "status_code": resp.status_code,
-            "response": resp.text,
+            "response": data,
         }
 
-    data = resp.json()
+    if "refresh_token" not in data:
+        return {
+            "error": "refresh_token_missing",
+            "response": data,
+        }
 
     return {
         "refresh_token": data["refresh_token"],
-        "scope": data["scope"],
+        "scope": data.get("scope"),
+        "expires_at": data.get("expires_at"),
     }
