@@ -4,7 +4,6 @@ from strava_client import get_access_token
 
 router = APIRouter(prefix="/strava", tags=["strava"])
 
-
 @router.get("/latest-activity")
 def latest_activity():
     token = get_access_token()
@@ -18,8 +17,20 @@ def latest_activity():
         params={"per_page": 1},
         timeout=10,
     )
-    resp.raise_for_status()
-    activity = resp.json()[0]
+
+    if resp.status_code != 200:
+        return {
+            "error": "strava_api_error",
+            "status": resp.status_code,
+            "body": resp.text,
+        }
+
+    data = resp.json()
+
+    if not data:
+        return {"message": "no activities found"}
+
+    activity = data[0]
 
     return {
         "id": activity["id"],
