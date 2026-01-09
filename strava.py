@@ -1,8 +1,13 @@
 from fastapi import APIRouter
 import requests
 from strava_client import get_access_token
+from strava_client import exchange_code_for_token
 
 router = APIRouter(prefix="/strava", tags=["strava"])
+
+@router.get("/oauth")
+def strava_oauth(code: str):
+    return exchange_code_for_token(code)
 
 @router.get("/latest-activity")
 def latest_activity():
@@ -40,10 +45,6 @@ def latest_activity():
         "average_hr": activity.get("average_heartrate"),
         "start_date": activity["start_date"],
     }
-    
-    @router.get("/oauth")
-def strava_oauth(code: str):
-    return exchange_code_for_token(code)
     
 def oauth_callback(code: str):
     import requests
