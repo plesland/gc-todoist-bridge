@@ -1,4 +1,4 @@
-import os
+himport os
 import requests
 
 STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID")
@@ -53,10 +53,9 @@ def exchange_code_for_token(code: str):
         timeout=10,
     )
 
-    if r.status_code != 200:
-        return {"error": "strava_token_error", "response": r.text}
-
     data = r.json()
 
-    save_refresh_token(data["refresh_token"])
-    return {"status": "authorized"}
+    return {
+        "refresh_token": data["refresh_token"],
+        "scope": data["scope"]
+    }
