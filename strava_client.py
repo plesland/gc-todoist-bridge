@@ -2,9 +2,9 @@ import os
 import requests
 from datetime import datetime, timezone
 
-STRAVA_CLIENT_ID = os.environ["STRAVA_CLIENT_ID"]
-STRAVA_CLIENT_SECRET = os.environ["STRAVA_CLIENT_SECRET"]
-STRAVA_REFRESH_TOKEN = os.environ["STRAVA_REFRESH_TOKEN"]
+STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID")
+STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET")
+STRAVA_REFRESH_TOKEN = os.environ.get("STRAVA_REFRESH_TOKEN")
 
 TOKEN_URL = "https://www.strava.com/oauth/token"
 API_BASE = "https://www.strava.com/api/v3"
