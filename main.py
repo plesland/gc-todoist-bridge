@@ -4,7 +4,7 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
-from routers.strava import router as strava_router
+from strava import router as strava_router
 
 # Environment variables (do NOT hard-crash on import)
 TODOIST_API_TOKEN = os.environ.get("TODOIST_API_TOKEN")
