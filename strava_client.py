@@ -1,3 +1,11 @@
+import os
+import requests
+
+STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID")
+STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET")
+STRAVA_REFRESH_TOKEN = os.environ.get("STRAVA_REFRESH_TOKEN")
+
+
 def get_access_token():
     missing = []
     if not STRAVA_CLIENT_ID:
@@ -8,7 +16,10 @@ def get_access_token():
         missing.append("STRAVA_REFRESH_TOKEN")
 
     if missing:
-        raise RuntimeError(f"Missing Strava env vars: {', '.join(missing)}")
+        return {
+            "error": "missing_env_vars",
+            "missing": missing,
+        }
 
     resp = requests.post(
         "https://www.strava.com/oauth/token",
@@ -22,6 +33,10 @@ def get_access_token():
     )
 
     if resp.status_code != 200:
-        raise RuntimeError(f"Strava token error: {resp.status_code} {resp.text}")
+        return {
+            "error": "strava_token_error",
+            "status_code": resp.status_code,
+            "response": resp.text,
+        }
 
-    return resp.json()["access_token"]
+    return resp.json().get("access_token")
