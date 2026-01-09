@@ -5,6 +5,10 @@ from strava_client import exchange_code_for_token
 
 router = APIRouter(prefix="/strava", tags=["strava"])
 
+@router.get("/oauth/callback")
+def strava_oauth_callback(code: str, scope: str = None, state: str = None):
+    return exchange_code_for_token(code)
+
 @router.get("/oauth")
 def strava_oauth(code: str):
     return exchange_code_for_token(code)
