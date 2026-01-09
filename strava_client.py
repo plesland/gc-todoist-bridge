@@ -11,8 +11,11 @@ API_BASE = "https://www.strava.com/api/v3"
 
 
 def get_access_token():
+    if not all([STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REFRESH_TOKEN]):
+        raise RuntimeError("Missing Strava environment variables")
+
     resp = requests.post(
-        TOKEN_URL,
+        "https://www.strava.com/oauth/token",
         data={
             "client_id": STRAVA_CLIENT_ID,
             "client_secret": STRAVA_CLIENT_SECRET,
@@ -22,5 +25,4 @@ def get_access_token():
         timeout=10,
     )
     resp.raise_for_status()
-    data = resp.json()
-    return data["access_token"]
+    return resp.json()["access_token"]
