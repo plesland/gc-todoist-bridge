@@ -40,3 +40,21 @@ def latest_activity():
         "average_hr": activity.get("average_heartrate"),
         "start_date": activity["start_date"],
     }
+    @router.get("/oauth")
+def oauth_callback(code: str):
+    import requests
+    import os
+
+    resp = requests.post(
+        "https://www.strava.com/oauth/token",
+        data={
+            "client_id": os.environ["STRAVA_CLIENT_ID"],
+            "client_secret": os.environ["STRAVA_CLIENT_SECRET"],
+            "code": code,
+            "grant_type": "authorization_code",
+        },
+        timeout=10,
+    )
+
+    return resp.json()
+    
