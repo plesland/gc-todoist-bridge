@@ -9,7 +9,7 @@ def auth_check(x_api_key: str = Header(...)):
     Raises HTTP 401 if missing or invalid.
     """
 
-    expected_key = os.getenv("API_KEY")
+    expected_key = os.getenv("INTERNAL_API_KEY")
 
     # If no key is configured, fail early (to avoid open access)
     if not expected_key:
