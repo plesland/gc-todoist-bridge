@@ -1,12 +1,22 @@
+# main.py
 import os
+import io
 import requests
+import pandas as pd
+import matplotlib.pyplot as plt
 from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
-from strava import router as strava_router
 
-# Environment variables (do NOT hard-crash on import)
+from strava import router as strava_router
+from strava import list_activities  # For reuse inside training-load endpoints
+
+# -------------------------
+# Environment Variables
+# -------------------------
+
 TODOIST_API_TOKEN = os.environ.get("TODOIST_API_TOKEN")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY")
 
@@ -35,7 +45,7 @@ class TaskUpdateRequest(BaseModel):
 
 
 # -------------------------
-# Auth / Config Enforcement
+# Auth / Config
 # -------------------------
 
 def auth_check(x_api_key: str):
@@ -56,7 +66,7 @@ def auth_check(x_api_key: str):
 
 
 # -------------------------
-# Health
+# Health Endpoint
 # -------------------------
 
 @app.get("/health")
@@ -69,24 +79,17 @@ def health():
 
 
 # -------------------------
-# Task Creation
+# TODOIST: Task Management
 # -------------------------
 
 @app.post("/task")
-def create_task(
-    task: TaskRequest,
-    x_api_key: str = Header(...)
-):
+def create_task(task: TaskRequest, x_api_key: str = Header(...)):
     auth_check(x_api_key)
 
-    payload = {
-        "content": task.content
-    }
-
+    payload = {"content": task.content}
     if task.due_string:
         payload["due_string"] = task.due_string
 
-    # Always label GC-managed tasks
     labels = set(task.labels or [])
     labels.add("gc-project")
     payload["labels"] = list(labels)
@@ -104,15 +107,8 @@ def create_task(
     return r.json()
 
 
-# -------------------------
-# Task Listing
-# -------------------------
-
 @app.get("/tasks")
-def list_tasks(
-    label: Optional[str] = Query(None),
-    x_api_key: str = Header(...)
-):
+def list_tasks(label: Optional[str] = Query(None), x_api_key: str = Header(...)):
     auth_check(x_api_key)
 
     params = {}
@@ -132,26 +128,15 @@ def list_tasks(
     return r.json()
 
 
-# -------------------------
-# Task Update
-# -------------------------
-
 @app.patch("/task/{task_id}")
-def update_task(
-    task_id: str,
-    task: TaskUpdateRequest,
-    x_api_key: str = Header(...)
-):
+def update_task(task_id: str, task: TaskUpdateRequest, x_api_key: str = Header(...)):
     auth_check(x_api_key)
 
     payload = {}
-
     if task.content is not None:
         payload["content"] = task.content
-
     if task.due_string is not None:
         payload["due_string"] = task.due_string
-
     if task.labels is not None:
         payload["labels"] = task.labels
 
@@ -168,15 +153,8 @@ def update_task(
     return r.json()
 
 
-# -------------------------
-# Task Close
-# -------------------------
-
 @app.post("/task/{task_id}/close")
-def close_task(
-    task_id: str,
-    x_api_key: str = Header(...)
-):
+def close_task(task_id: str, x_api_key: str = Header(...)):
     auth_check(x_api_key)
 
     r = requests.post(
@@ -190,10 +168,6 @@ def close_task(
 
     return {"status": "closed"}
 
-
-# -------------------------
-# Task Summary (Foreman Sweep)
-# -------------------------
 
 @app.get("/tasks/summary")
 def task_summary(x_api_key: str = Header(...)):
@@ -213,12 +187,7 @@ def task_summary(x_api_key: str = Header(...)):
     now = datetime.utcnow()
     soon = now + timedelta(days=5)
 
-    summary = {
-        "overdue": [],
-        "blocking": [],
-        "due_soon": [],
-        "inspections": []
-    }
+    summary = {"overdue": [], "blocking": [], "due_soon": [], "inspections": []}
 
     for t in tasks:
         labels = set(t.get("labels", []))
@@ -226,7 +195,6 @@ def task_summary(x_api_key: str = Header(...)):
 
         if "blocking" in labels:
             summary["blocking"].append(t)
-
         if "inspection" in labels:
             summary["inspections"].append(t)
 
@@ -241,3 +209,51 @@ def task_summary(x_api_key: str = Header(...)):
                 pass
 
     return summary
+
+
+# -------------------------
+# TRAINING LOAD ENDPOINTS
+# -------------------------
+
+@app.get("/training-load")
+def training_load(days: int = 42, x_api_key: str = Header(...)):
+    """
+    Returns CTL, ATL, TSB, and trend summary for recent Strava activities.
+    """
+    auth_check(x_api_key)
+    data = list_activities(days=days, x_api_key=x_api_key)
+    training_load = data.get("training_load")
+
+    if not training_load:
+        raise HTTPException(status_code=404, detail="No training load data found")
+
+    return training_load
+
+
+@app.get("/training-load/chart")
+def training_load_chart(days: int = 42, x_api_key: str = Header(...)):
+    """
+    Returns a PNG chart of CTL/ATL/TSB over the past period.
+    """
+    auth_check(x_api_key)
+    data = list_activities(days=days, x_api_key=x_api_key)
+    load = data.get("training_load")
+
+    if not load or "history" not in load:
+        raise HTTPException(status_code=400, detail="no load data")
+
+    df = pd.DataFrame(load["history"])
+    plt.figure(figsize=(8, 4))
+    plt.plot(df["date"], df["ctl"], label="CTL (42d)")
+    plt.plot(df["date"], df["atl"], label="ATL (7d)")
+    plt.plot(df["date"], df["tsb"], label="TSB", linestyle="--")
+    plt.legend()
+    plt.title("Training Load Trends")
+    plt.xlabel("Date")
+    plt.ylabel("Score")
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight")
+    plt.close()
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
