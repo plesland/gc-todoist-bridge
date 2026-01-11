@@ -1,5 +1,6 @@
 # training_load.py
 from datetime import datetime, timedelta
+from db import get_conn, init_db
 import math
 import pandas as pd
 
@@ -90,6 +91,23 @@ def compute_training_load(activities):
         "fresh" if latest["tsb"] > 10 else
         "balanced"
     )
+    
+        # ---------- Persist results ----------
+    init_db()
+    with get_conn() as conn:
+        for i, row in df.iterrows():
+            conn.execute("""
+                INSERT OR REPLACE INTO training_load (user_id, date, tss, ctl, atl, tsb)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                "default_user",  # Replace with real user_id if multi-user
+                str(i),
+                float(row["tss"]),
+                float(row["ctl"]),
+                float(row["atl"]),
+                float(row["tsb"])
+            ))
+        conn.commit()
 
     return {
         "summary": {
