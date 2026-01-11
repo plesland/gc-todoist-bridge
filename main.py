@@ -252,23 +252,25 @@ def training_load_history(limit: int = 90, x_api_key: str = Header(...)):
 
 @app.get("/training-load/chart")
 def training_load_chart(days: int = 42, x_api_key: str = Header(...)):
-    """
-    Returns a PNG chart of CTL/ATL/TSB over the past period.
-    """
     auth_check(x_api_key)
-    data = list_activities(days=days, x_api_key=x_api_key)
-    load = data.get("training_load")
 
-    if not load or "history" not in load:
-        raise HTTPException(status_code=400, detail="no load data")
+    with get_conn() as conn:
+        df = pd.read_sql_query("""
+            SELECT date, ctl, atl, tsb FROM training_load
+            ORDER BY date DESC LIMIT ?
+        """, conn, params=(days,))
+    if df.empty:
+        raise HTTPException(status_code=404, detail="no historical data")
 
-    df = pd.DataFrame(load["history"])
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date")
+
     plt.figure(figsize=(8, 4))
     plt.plot(df["date"], df["ctl"], label="CTL (42d)")
     plt.plot(df["date"], df["atl"], label="ATL (7d)")
     plt.plot(df["date"], df["tsb"], label="TSB", linestyle="--")
     plt.legend()
-    plt.title("Training Load Trends")
+    plt.title("Training Load Trends (Persistent)")
     plt.xlabel("Date")
     plt.ylabel("Score")
 
@@ -276,4 +278,4 @@ def training_load_chart(days: int = 42, x_api_key: str = Header(...)):
     plt.savefig(buf, format="png", bbox_inches="tight")
     plt.close()
     buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
+    return StreamingResponse(buf, media_type="image/
