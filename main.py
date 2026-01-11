@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
+from db import get_conn
 
 from strava import router as strava_router
 from strava import list_activities  # For reuse inside training-load endpoints
@@ -229,6 +230,25 @@ def training_load(days: int = 42, x_api_key: str = Header(...)):
 
     return training_load
 
+@app.get("/training-load/history")
+def training_load_history(limit: int = 90, x_api_key: str = Header(...)):
+    """
+    Returns stored training load history (CTL/ATL/TSB) from the database.
+    """
+    auth_check(x_api_key)
+
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT date, tss, ctl, atl, tsb
+            FROM training_load
+            ORDER BY date DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No stored training data found")
+
+    return [dict(r) for r in rows]
 
 @app.get("/training-load/chart")
 def training_load_chart(days: int = 42, x_api_key: str = Header(...)):
