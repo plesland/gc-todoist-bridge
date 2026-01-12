@@ -278,4 +278,4 @@ def training_load_chart(days: int = 42, x_api_key: str = Header(...)):
     plt.savefig(buf, format="png", bbox_inches="tight")
     plt.close()
     buf.seek(0)
-    return StreamingResponse(buf, media_type="image/
+    return StreamingResponse(buf, media_type="image/png")
